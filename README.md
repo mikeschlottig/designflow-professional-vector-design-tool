@@ -1,6 +1,6 @@
 # Cloudflare Workers Full-Stack React Template
 
-[![[cloudflarebutton]]](https://deploy.workers.cloudflare.com)
+[![[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikeschlottig/designflow-professional-vector-design-tool)]](https://deploy.workers.cloudflare.com)
 
 A production-ready full-stack application template built on Cloudflare Workers with Durable Objects for stateful data persistence. Features a modern React frontend with Tailwind CSS, shadcn/ui components, and a Hono-powered API backend. Perfect for building scalable, real-time apps like chat systems, collaborative tools, or dashboards.
 
@@ -94,7 +94,7 @@ This builds frontend assets, bundles the Worker, and deploys via Wrangler.
 - Set `wrangler secrets put` for sensitive data
 - Assets served as SPA with Worker handling `/api/*`
 
-[![[cloudflarebutton]]](https://deploy.workers.cloudflare.com)
+[![[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikeschlottig/designflow-professional-vector-design-tool)]](https://deploy.workers.cloudflare.com)
 
 ## 🗂️ Project Structure
 
