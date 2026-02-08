@@ -3,22 +3,44 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
-
-// Minimal real-world chat example types (shared by frontend and worker)
 export interface User {
   id: string;
   name: string;
 }
-
 export interface Chat {
   id: string;
   title: string;
 }
-
 export interface ChatMessage {
   id: string;
   chatId: string;
   userId: string;
   text: string;
-  ts: number; // epoch millis
+  ts: number;
+}
+export interface CanvasElement {
+  id: string;
+  type: 'rect' | 'circle' | 'text';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  text?: string;
+  name: string;
+}
+export interface CanvasTransform {
+  x: number;
+  y: number;
+  zoom: number;
+}
+export interface Design {
+  id: string;
+  name: string;
+  elements: CanvasElement[];
+  canvasTransform: CanvasTransform;
+  createdAt: number;
+  updatedAt: number;
 }

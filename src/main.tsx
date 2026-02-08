@@ -21,6 +21,11 @@ const router = createBrowserRouter([
     errorElement: <RouteErrorBoundary />,
   },
   {
+    path: "/editor/:id",
+    element: <EditorPage />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
     path: "/editor",
     element: <EditorPage />,
     errorElement: <RouteErrorBoundary />,
