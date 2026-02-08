@@ -92,11 +92,11 @@ export function Canvas() {
   }, [undo, redo, duplicateSelected, removeSelected, nudgeElements, setTool]);
 
   useEffect(() => {
-    if (editingTextId && svgRef.current) {
+    if (editingTextId && svgRef.current && containerRef.current) {
       const el = svgRef.current.querySelector(`[data-el-id="${editingTextId}"]`) as SVGTextElement;
       if (el) {
         const rect = el.getBoundingClientRect();
-        const containerRect = containerRef.current!.getBoundingClientRect();
+        const containerRect = containerRef.current.getBoundingClientRect();
         setOverlayTextRect({
           left: rect.left - containerRect.left,
           top: rect.top - containerRect.top,
@@ -109,7 +109,7 @@ export function Canvas() {
     } else {
       setOverlayTextRect(null);
     }
-  }, [editingTextId]);
+  }, [editingTextId, containerRef, elements]);
   useEffect(() => {
     if (isDirty) {
       const timer = setTimeout(() => saveDesign(), 3000);
@@ -157,8 +157,10 @@ export function Canvas() {
         } else {
           setSelection(clickedEl.id);
         }
+        // Use current selection state for moving (after set/toggle)
+        const currentSelectedIds = useEditorStore.getState().selectedIds;
         const startPosMap = new Map();
-        Array.from(selectedIds).forEach(id => {
+        currentSelectedIds.forEach(id => {
           const el = elements.find(el => el.id === id);
           if (el) {
             startPosMap.set(id, { x: el.x, y: el.y, width: el.width, height: el.height });
@@ -334,32 +336,32 @@ export function Canvas() {
               {!presentationMode && <SelectionOverlay />}
             </g>
           </motion.svg>
-        </div>
-        {editingTextId && overlayTextRect && (
-          <div
-            className="absolute z-20"
-            style={{
-              left: overlayTextRect.left,
-              top: overlayTextRect.top,
-              width: overlayTextRect.width,
-              height: overlayTextRect.height
-            }}
-          >
-            <textarea
-              ref={textareaRef}
-              value={elements.find(e => e.id === editingTextId)?.text || ''}
-              onChange={(e) => updateElement(editingTextId!, { text: e.target.value })}
-              onBlur={() => setEditingTextId(null)}
-              className="w-full h-full resize-none border-2 border-primary/50 bg-background/95 backdrop-blur text-inherit outline-none p-1"
+          {editingTextId && overlayTextRect && (
+            <div
+              className="absolute z-20 pointer-events-none"
               style={{
-                fontFamily: 'Inter, sans-serif',
-                fontSize: overlayTextRect.fontSize,
-                fontWeight: 500,
-                lineHeight: 1.25
+                left: overlayTextRect.left,
+                top: overlayTextRect.top,
+                width: overlayTextRect.width,
+                height: overlayTextRect.height
               }}
-            />
-          </div>
-        )}
+            >
+              <textarea
+                ref={textareaRef}
+                value={elements.find(e => e.id === editingTextId)?.text || ''}
+                onChange={(e) => updateElement(editingTextId!, { text: e.target.value })}
+                onBlur={() => setEditingTextId(null)}
+                className="w-full h-full resize-none border-2 border-primary/50 bg-background/95 backdrop-blur text-inherit outline-none p-1 pointer-events-auto"
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: overlayTextRect.fontSize,
+                  fontWeight: 500,
+                  lineHeight: 1.25
+                }}
+              />
+            </div>
+          )}
+        </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-64">
         <ContextMenuItem onClick={duplicateSelected} disabled={selectedIds.length === 0}>
