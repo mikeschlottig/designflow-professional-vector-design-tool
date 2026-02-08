@@ -4,7 +4,7 @@
  */
  {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "vite-cf-do-runner",
+	"name": "design-flow-p8x2qwzy3plmus8eabo5k",
 	"main": "worker/index.ts",
 	"compatibility_date": "2025-04-24",
 	"assets": {
