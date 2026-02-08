@@ -9,30 +9,32 @@ interface EditorState {
   elements: CanvasElement[];
   past: CanvasElement[][];
   future: CanvasElement[][];
-  selectedId: string | null;
+  selectedIds: string[];
   currentTool: Tool;
   canvasTransform: CanvasTransform;
   isDirty: boolean;
   isSaving: boolean;
+  presentationMode: boolean;
   // Actions
   setTool: (tool: Tool) => void;
-  setSelection: (id: string | null) => void;
+  setSelection: (ids: string | string[] | null) => void;
+  toggleSelection: (id: string) => void;
   addElement: (element: Omit<CanvasElement, 'id'>) => string;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
-  removeElement: (id: string) => void;
+  removeSelected: () => void;
   setElements: (elements: CanvasElement[]) => void;
   setCanvasTransform: (transform: Partial<CanvasTransform>) => void;
   setDesignName: (name: string) => void;
+  togglePresentationMode: () => void;
   // History
   undo: () => void;
   redo: () => void;
   saveHistory: () => void;
   // Arrangement & Manipulation
-  duplicateElement: (id: string) => void;
-  bringToFront: (id: string) => void;
-  sendToBack: (id: string) => void;
-  moveForward: (id: string) => void;
-  moveBackward: (id: string) => void;
+  nudgeElements: (dx: number, dy: number) => void;
+  duplicateSelected: () => void;
+  bringToFront: () => void;
+  sendToBack: () => void;
   // Persistence
   loadDesign: (id: string) => Promise<void>;
   saveDesign: () => Promise<void>;
@@ -43,25 +45,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   elements: [],
   past: [],
   future: [],
-  selectedId: null,
+  selectedIds: [],
   currentTool: 'select',
   canvasTransform: { x: 0, y: 0, zoom: 1 },
   isDirty: false,
   isSaving: false,
+  presentationMode: false,
   saveHistory: () => {
     const { elements, past } = get();
-    set({ 
-      past: [...past.slice(-49), elements], // Keep last 50 states
-      future: [] 
+    set({
+      past: [...past.slice(-49), JSON.parse(JSON.stringify(elements))],
+      future: []
     });
   },
   undo: () => {
     const { past, elements, future } = get();
     if (past.length === 0) return;
     const previous = past[past.length - 1];
-    const newPast = past.slice(0, past.length - 1);
     set({
-      past: newPast,
+      past: past.slice(0, past.length - 1),
       elements: previous,
       future: [elements, ...future],
       isDirty: true
@@ -71,97 +73,107 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const { past, elements, future } = get();
     if (future.length === 0) return;
     const next = future[0];
-    const newFuture = future.slice(1);
     set({
       past: [...past, elements],
       elements: next,
-      future: newFuture,
+      future: future.slice(1),
       isDirty: true
     });
   },
   setTool: (tool) => set({ currentTool: tool }),
-  setSelection: (id) => set({ selectedId: id }),
+  setSelection: (ids) => {
+    if (ids === null) set({ selectedIds: [] });
+    else if (Array.isArray(ids)) set({ selectedIds: ids });
+    else set({ selectedIds: [ids] });
+  },
+  toggleSelection: (id) => {
+    const { selectedIds } = get();
+    if (selectedIds.includes(id)) {
+      set({ selectedIds: selectedIds.filter(i => i !== id) });
+    } else {
+      set({ selectedIds: [...selectedIds, id] });
+    }
+  },
   setDesignName: (name) => set({ designName: name, isDirty: true }),
   addElement: (el) => {
     const id = nanoid();
     get().saveHistory();
     set((state) => ({
       elements: [...state.elements, { ...el, id }],
-      selectedId: id,
+      selectedIds: [id],
       isDirty: true,
     }));
     return id;
   },
   updateElement: (id, updates) => {
-    // Only save history if it's a significant move or update (usually handled at PointerUp in Canvas)
     set((state) => ({
       elements: state.elements.map((el) => (el.id === id ? { ...el, ...updates } : el)),
       isDirty: true,
     }));
   },
-  removeElement: (id) => {
+  removeSelected: () => {
+    const { selectedIds, elements } = get();
+    if (selectedIds.length === 0) return;
     get().saveHistory();
-    set((state) => ({
-      elements: state.elements.filter((el) => el.id !== id),
-      selectedId: state.selectedId === id ? null : state.selectedId,
+    set({
+      elements: elements.filter((el) => !selectedIds.includes(el.id)),
+      selectedIds: [],
       isDirty: true,
-    }));
+    });
   },
-  setElements: (elements) => {
-    set({ elements, isDirty: true });
-  },
-  duplicateElement: (id) => {
-    const el = get().elements.find(e => e.id === id);
-    if (!el) return;
+  setElements: (elements) => set({ elements, isDirty: true }),
+  nudgeElements: (dx, dy) => {
+    const { selectedIds, elements } = get();
+    if (selectedIds.length === 0) return;
     get().saveHistory();
-    const newId = nanoid();
-    const newEl = { ...el, id: newId, x: el.x + 20, y: el.y + 20, name: `${el.name} Copy` };
+    set({
+      elements: elements.map(el => 
+        selectedIds.includes(el.id) ? { ...el, x: el.x + dx, y: el.y + dy } : el
+      ),
+      isDirty: true
+    });
+  },
+  duplicateSelected: () => {
+    const { selectedIds, elements } = get();
+    if (selectedIds.length === 0) return;
+    get().saveHistory();
+    const newElements: CanvasElement[] = [];
+    const newSelectedIds: string[] = [];
+    selectedIds.forEach(id => {
+      const el = elements.find(e => e.id === id);
+      if (el) {
+        const newId = nanoid();
+        newElements.push({ ...el, id: newId, x: el.x + 20, y: el.y + 20, name: `${el.name} Copy` });
+        newSelectedIds.push(newId);
+      }
+    });
     set(state => ({
-      elements: [...state.elements, newEl],
-      selectedId: newId,
+      elements: [...state.elements, ...newElements],
+      selectedIds: newSelectedIds,
       isDirty: true
     }));
   },
-  bringToFront: (id) => {
+  bringToFront: () => {
+    const { selectedIds, elements } = get();
+    if (selectedIds.length === 0) return;
     get().saveHistory();
-    set(state => {
-      const el = state.elements.find(e => e.id === id);
-      if (!el) return state;
-      return { elements: [...state.elements.filter(e => e.id !== id), el] };
-    });
+    const selected = elements.filter(el => selectedIds.includes(el.id));
+    const remaining = elements.filter(el => !selectedIds.includes(el.id));
+    set({ elements: [...remaining, ...selected] });
   },
-  sendToBack: (id) => {
+  sendToBack: () => {
+    const { selectedIds, elements } = get();
+    if (selectedIds.length === 0) return;
     get().saveHistory();
-    set(state => {
-      const el = state.elements.find(e => e.id === id);
-      if (!el) return state;
-      return { elements: [el, ...state.elements.filter(e => e.id !== id)] };
-    });
-  },
-  moveForward: (id) => {
-    get().saveHistory();
-    set(state => {
-      const idx = state.elements.findIndex(e => e.id === id);
-      if (idx === -1 || idx === state.elements.length - 1) return state;
-      const newElements = [...state.elements];
-      [newElements[idx], newElements[idx + 1]] = [newElements[idx + 1], newElements[idx]];
-      return { elements: newElements };
-    });
-  },
-  moveBackward: (id) => {
-    get().saveHistory();
-    set(state => {
-      const idx = state.elements.findIndex(e => e.id === id);
-      if (idx <= 0) return state;
-      const newElements = [...state.elements];
-      [newElements[idx], newElements[idx - 1]] = [newElements[idx - 1], newElements[idx]];
-      return { elements: newElements };
-    });
+    const selected = elements.filter(el => selectedIds.includes(el.id));
+    const remaining = elements.filter(el => !selectedIds.includes(el.id));
+    set({ elements: [...selected, ...remaining] });
   },
   setCanvasTransform: (transform) => set((state) => ({
     canvasTransform: { ...state.canvasTransform, ...transform },
     isDirty: true,
   })),
+  togglePresentationMode: () => set(state => ({ presentationMode: !state.presentationMode })),
   loadDesign: async (id) => {
     try {
       const design = await api<Design>(`/api/designs/${id}`);

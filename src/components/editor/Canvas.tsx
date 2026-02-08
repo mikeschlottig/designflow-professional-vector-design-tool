@@ -1,44 +1,47 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useEditorStore } from '@/store/editor-store';
-import { screenToCanvas } from '@/lib/geometry';
-import { motion } from 'framer-motion';
+import { screenToCanvas, isPointInRect } from '@/lib/geometry';
+import { motion, AnimatePresence } from 'framer-motion';
 import { SelectionOverlay } from './SelectionOverlay';
 import { ElementType } from '@shared/types';
-import { 
-  ContextMenu, 
-  ContextMenuContent, 
-  ContextMenuItem, 
-  ContextMenuSeparator, 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
   ContextMenuShortcut
 } from "@/components/ui/context-menu";
-import { Copy, Trash2, ArrowUp, ArrowDown, Layers, Square, Circle, Type } from 'lucide-react';
+import { Copy, Trash2, Layers } from 'lucide-react';
 export function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const elements = useEditorStore((s) => s.elements);
-  const selectedId = useEditorStore((s) => s.selectedId);
+  const selectedIds = useEditorStore((s) => s.selectedIds);
   const currentTool = useEditorStore((s) => s.currentTool);
   const canvasTransform = useEditorStore((s) => s.canvasTransform);
   const addElement = useEditorStore((s) => s.addElement);
   const updateElement = useEditorStore((s) => s.updateElement);
-  const removeElement = useEditorStore((s) => s.removeElement);
+  const removeSelected = useEditorStore((s) => s.removeSelected);
   const setSelection = useEditorStore((s) => s.setSelection);
+  const toggleSelection = useEditorStore((s) => s.toggleSelection);
   const setCanvasTransform = useEditorStore((s) => s.setCanvasTransform);
   const setTool = useEditorStore((s) => s.setTool);
   const saveDesign = useEditorStore((s) => s.saveDesign);
   const saveHistory = useEditorStore((s) => s.saveHistory);
   const undo = useEditorStore((s) => s.undo);
   const redo = useEditorStore((s) => s.redo);
-  const duplicateElement = useEditorStore((s) => s.duplicateElement);
+  const duplicateSelected = useEditorStore((s) => s.duplicateSelected);
   const bringToFront = useEditorStore((s) => s.bringToFront);
   const sendToBack = useEditorStore((s) => s.sendToBack);
+  const nudgeElements = useEditorStore((s) => s.nudgeElements);
   const isDirty = useEditorStore((s) => s.isDirty);
+  const presentationMode = useEditorStore((s) => s.presentationMode);
   const [interaction, setInteraction] = useState<{
     type: 'idle' | 'drawing' | 'moving' | 'panning' | 'resizing';
     activeId: string | null;
     handleIndex?: number;
     startPoint: { x: number; y: number };
-    elementStartPos?: { x: number; y: number; width: number; height: number };
+    elementsStartPos?: Map<string, { x: number; y: number; width: number; height: number }>;
   }>({ type: 'idle', activeId: null, startPoint: { x: 0, y: 0 } });
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -46,14 +49,19 @@ export function Canvas() {
       const isMod = e.ctrlKey || e.metaKey;
       if (isMod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
       if (isMod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
-      if (isMod && e.key === 'd') { e.preventDefault(); if (selectedId) duplicateElement(selectedId); }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedId) removeElement(selectedId);
+      if (isMod && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
+      if (e.key === 'Delete' || e.key === 'Backspace') { removeSelected(); }
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        const delta = e.shiftKey ? 10 : 1;
+        let dx = 0, dy = 0;
+        if (e.key === 'ArrowLeft') dx = -delta;
+        if (e.key === 'ArrowRight') dx = delta;
+        if (e.key === 'ArrowUp') dy = -delta;
+        if (e.key === 'ArrowDown') dy = delta;
+        nudgeElements(dx, dy);
       }
-      if (e.code === 'Space' && !e.repeat) {
-        setTool('hand');
-      }
-      // Shortcuts
+      if (e.code === 'Space' && !e.repeat) setTool('hand');
       if (e.key === 'v') setTool('select');
       if (e.key === 'r') setTool('rect');
       if (e.key === 'o') setTool('circle');
@@ -69,50 +77,62 @@ export function Canvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedId, removeElement, setTool, undo, redo, duplicateElement]);
+  }, [undo, redo, duplicateSelected, removeSelected, nudgeElements, setTool]);
   useEffect(() => {
     if (isDirty) {
-      const timer = setTimeout(() => saveDesign(), 2000);
+      const timer = setTimeout(() => saveDesign(), 3000);
       return () => clearTimeout(timer);
     }
   }, [isDirty, saveDesign]);
   const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.button === 2) return; // Right click handled by context menu
+    if (e.button === 2) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const point = screenToCanvas(e.clientX, e.clientY, rect.left + canvasTransform.x, rect.top + canvasTransform.y, canvasTransform.zoom);
     const target = e.target as HTMLElement;
     const handleIdx = target.getAttribute('data-handle-index');
-    if (handleIdx !== null && selectedId) {
-      const el = elements.find(item => item.id === selectedId);
+    if (handleIdx !== null && selectedIds.length === 1) {
+      const el = elements.find(item => item.id === selectedIds[0]);
       if (el) {
         saveHistory();
+        const startPosMap = new Map();
+        startPosMap.set(el.id, { x: el.x, y: el.y, width: el.width, height: el.height });
         setInteraction({
           type: 'resizing',
-          activeId: selectedId,
+          activeId: selectedIds[0],
           handleIndex: parseInt(handleIdx),
           startPoint: point,
-          elementStartPos: { x: el.x, y: el.y, width: el.width, height: el.height }
+          elementsStartPos: startPosMap
         });
         return;
       }
     }
     if (e.button === 1 || currentTool === 'hand') {
-      setInteraction({ type: 'panning', activeId: null, startPoint: point });
+      setInteraction({ type: 'panning', activeId: null, startPoint: { x: e.clientX, y: e.clientY } });
       return;
     }
     if (currentTool === 'select') {
-      const clickedEl = [...elements].reverse().find(el => (
-        point.x >= el.x && point.x <= el.x + el.width &&
-        point.y >= el.y && point.y <= el.y + el.height
-      ));
+      const clickedEl = [...elements].reverse().find(el => isPointInRect(point, el));
       if (clickedEl) {
-        setSelection(clickedEl.id);
+        if (e.shiftKey) {
+          toggleSelection(clickedEl.id);
+        } else if (!selectedIds.includes(clickedEl.id)) {
+          setSelection(clickedEl.id);
+        }
+        const currentSelected = e.shiftKey 
+          ? (selectedIds.includes(clickedEl.id) ? selectedIds.filter(id => id !== clickedEl.id) : [...selectedIds, clickedEl.id])
+          : (selectedIds.includes(clickedEl.id) ? selectedIds : [clickedEl.id]);
+        const startPosMap = new Map();
+        elements.forEach(el => {
+          if (currentSelected.includes(el.id)) {
+            startPosMap.set(el.id, { x: el.x, y: el.y, width: el.width, height: el.height });
+          }
+        });
         setInteraction({
           type: 'moving',
           activeId: clickedEl.id,
           startPoint: point,
-          elementStartPos: { x: clickedEl.x, y: clickedEl.y, width: clickedEl.width, height: clickedEl.height }
+          elementsStartPos: startPosMap
         });
       } else {
         setSelection(null);
@@ -132,7 +152,7 @@ export function Canvas() {
         stroke: isText ? 'transparent' : '#2563eb',
         strokeWidth: isText ? 0 : 1,
         name: isText ? 'Text' : (currentTool === 'rect' ? 'Rectangle' : 'Circle'),
-        text: isText ? 'Double click properties to edit' : undefined,
+        text: isText ? 'Edit Content' : undefined,
         fontSize: isText ? 16 : undefined,
       });
       if (isText) {
@@ -149,24 +169,26 @@ export function Canvas() {
     const point = screenToCanvas(e.clientX, e.clientY, rect.left + canvasTransform.x, rect.top + canvasTransform.y, canvasTransform.zoom);
     if (interaction.type === 'panning') {
       setCanvasTransform({
-        x: canvasTransform.x + e.movementX,
-        y: canvasTransform.y + e.movementY
+        x: canvasTransform.x + (e.clientX - interaction.startPoint.x),
+        y: canvasTransform.y + (e.clientY - interaction.startPoint.y)
+      });
+      setInteraction(prev => ({ ...prev, startPoint: { x: e.clientX, y: e.clientY } }));
+      return;
+    }
+    if (interaction.type === 'moving' && interaction.elementsStartPos) {
+      const dx = point.x - interaction.startPoint.x;
+      const dy = point.y - interaction.startPoint.y;
+      interaction.elementsStartPos.forEach((start, id) => {
+        updateElement(id, { x: start.x + dx, y: start.y + dy });
       });
       return;
     }
-    if (interaction.type === 'moving' && interaction.activeId && interaction.elementStartPos) {
+    if (interaction.type === 'resizing' && interaction.activeId && interaction.elementsStartPos && interaction.handleIndex !== undefined) {
       const dx = point.x - interaction.startPoint.x;
       const dy = point.y - interaction.startPoint.y;
-      updateElement(interaction.activeId, {
-        x: interaction.elementStartPos.x + dx,
-        y: interaction.elementStartPos.y + dy
-      });
-      return;
-    }
-    if (interaction.type === 'resizing' && interaction.activeId && interaction.elementStartPos && interaction.handleIndex !== undefined) {
-      const dx = point.x - interaction.startPoint.x;
-      const dy = point.y - interaction.startPoint.y;
-      const { x, y, width, height } = interaction.elementStartPos;
+      const start = interaction.elementsStartPos.get(interaction.activeId);
+      if (!start) return;
+      let { x, y, width, height } = start;
       let nx = x, ny = y, nw = width, nh = height;
       switch (interaction.handleIndex) {
         case 0: nx += dx; ny += dy; nw -= dx; nh -= dy; break;
@@ -190,20 +212,27 @@ export function Canvas() {
     }
   };
   const handlePointerUp = () => {
-    if (interaction.type === 'moving' || interaction.type === 'resizing') {
-      // Logic for saving history was done at PointerDown for these, 
-      // but maybe we only want to save if it actually changed?
-    }
     if (interaction.type !== 'idle') {
       setInteraction({ type: 'idle', activeId: null, startPoint: { x: 0, y: 0 } });
       saveDesign();
     }
   };
   const handleWheel = (e: React.WheelEvent) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
     if (e.ctrlKey || e.metaKey) {
-      const zoomDelta = -e.deltaY * 0.001;
-      const nextZoom = Math.min(Math.max(canvasTransform.zoom + zoomDelta, 0.1), 10);
-      setCanvasTransform({ zoom: nextZoom });
+      e.preventDefault();
+      const zoomSpeed = 0.002;
+      const delta = -e.deltaY;
+      const scale = 1 + delta * zoomSpeed;
+      const nextZoom = Math.min(Math.max(canvasTransform.zoom * scale, 0.05), 20);
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const canvasMouseX = (mouseX - canvasTransform.x) / canvasTransform.zoom;
+      const canvasMouseY = (mouseY - canvasTransform.y) / canvasTransform.zoom;
+      const nextX = mouseX - canvasMouseX * nextZoom;
+      const nextY = mouseY - canvasMouseY * nextZoom;
+      setCanvasTransform({ zoom: nextZoom, x: nextX, y: nextY });
     } else {
       setCanvasTransform({
         x: canvasTransform.x - e.deltaX,
@@ -234,19 +263,15 @@ export function Canvas() {
           <motion.svg className="w-full h-full" id="canvas-svg">
             <g transform={`translate(${canvasTransform.x}, ${canvasTransform.y}) scale(${canvasTransform.zoom})`}>
               {elements.map((el) => {
-                const isSelected = selectedId === el.id;
+                const isSelected = selectedIds.includes(el.id);
                 const commonProps = {
                   key: el.id,
                   fill: el.fill,
                   stroke: isSelected ? '#3b82f6' : el.stroke,
                   strokeWidth: isSelected ? 2 / canvasTransform.zoom : el.strokeWidth / canvasTransform.zoom,
                 };
-                if (el.type === 'rect') {
-                  return <rect {...commonProps} x={el.x} y={el.y} width={el.width} height={el.height} rx={2} />;
-                }
-                if (el.type === 'circle') {
-                  return <ellipse {...commonProps} cx={el.x + el.width/2} cy={el.y + el.height/2} rx={el.width/2} ry={el.height/2} />;
-                }
+                if (el.type === 'rect') return <rect {...commonProps} x={el.x} y={el.y} width={el.width} height={el.height} rx={2} />;
+                if (el.type === 'circle') return <ellipse {...commonProps} cx={el.x + el.width/2} cy={el.y + el.height/2} rx={el.width/2} ry={el.height/2} />;
                 if (el.type === 'text') {
                   return (
                     <text
@@ -267,23 +292,23 @@ export function Canvas() {
                 }
                 return null;
               })}
-              <SelectionOverlay />
+              {!presentationMode && <SelectionOverlay />}
             </g>
           </motion.svg>
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-64 bg-zinc-900 border-zinc-800 text-zinc-300">
-        <ContextMenuItem onClick={() => selectedId && duplicateElement(selectedId)} disabled={!selectedId}>
+        <ContextMenuItem onClick={duplicateSelected} disabled={selectedIds.length === 0}>
           <Copy className="w-4 h-4 mr-2" /> Duplicate <ContextMenuShortcut>⌘D</ContextMenuShortcut>
         </ContextMenuItem>
-        <ContextMenuItem onClick={() => selectedId && removeElement(selectedId)} disabled={!selectedId} className="text-red-400">
+        <ContextMenuItem onClick={removeSelected} disabled={selectedIds.length === 0} className="text-red-400">
           <Trash2 className="w-4 h-4 mr-2" /> Delete <ContextMenuShortcut>⌫</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuSeparator className="bg-zinc-800" />
-        <ContextMenuItem onClick={() => selectedId && bringToFront(selectedId)} disabled={!selectedId}>
+        <ContextMenuItem onClick={bringToFront} disabled={selectedIds.length === 0}>
           <Layers className="w-4 h-4 mr-2" /> Bring to Front
         </ContextMenuItem>
-        <ContextMenuItem onClick={() => selectedId && sendToBack(selectedId)} disabled={!selectedId}>
+        <ContextMenuItem onClick={sendToBack} disabled={selectedIds.length === 0}>
           <Layers className="w-4 h-4 mr-2" /> Send to Back
         </ContextMenuItem>
         <ContextMenuSeparator className="bg-zinc-800" />
