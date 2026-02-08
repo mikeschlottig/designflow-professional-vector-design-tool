@@ -11,17 +11,17 @@ export function SelectionOverlay() {
   const scaledHandleSize = HANDLE_SIZE / zoom;
   const offset = scaledHandleSize / 2;
   const handles = [
-    { x: x, y: y, cursor: 'nwse-resize' }, // Top-left
-    { x: x + width / 2, y: y, cursor: 'ns-resize' }, // Top-mid
-    { x: x + width, y: y, cursor: 'nesw-resize' }, // Top-right
-    { x: x + width, y: y + height / 2, cursor: 'ew-resize' }, // Right-mid
-    { x: x + width, y: y + height, cursor: 'nwse-resize' }, // Bottom-right
-    { x: x + width / 2, y: y + height, cursor: 'ns-resize' }, // Bottom-mid
-    { x: x, y: y + height, cursor: 'nesw-resize' }, // Bottom-left
-    { x: x, y: y + height / 2, cursor: 'ew-resize' }, // Left-mid
+    { x: x, y: y, cursor: 'nwse-resize' }, // 0: Top-left
+    { x: x + width / 2, y: y, cursor: 'ns-resize' }, // 1: Top-mid
+    { x: x + width, y: y, cursor: 'nesw-resize' }, // 2: Top-right
+    { x: x + width, y: y + height / 2, cursor: 'ew-resize' }, // 3: Right-mid
+    { x: x + width, y: y + height, cursor: 'nwse-resize' }, // 4: Bottom-right
+    { x: x + width / 2, y: y + height, cursor: 'ns-resize' }, // 5: Bottom-mid
+    { x: x, y: y + height, cursor: 'nesw-resize' }, // 6: Bottom-left
+    { x: x, y: y + height / 2, cursor: 'ew-resize' }, // 7: Left-mid
   ];
   return (
-    <g className="pointer-events-none">
+    <g className="selection-overlay">
       {/* Bounding Box */}
       <rect
         x={x}
@@ -31,11 +31,13 @@ export function SelectionOverlay() {
         fill="none"
         stroke="#3b82f6"
         strokeWidth={2 / zoom}
+        className="pointer-events-none"
       />
       {/* Interaction Handles */}
       {handles.map((h, i) => (
         <rect
           key={i}
+          data-handle-index={i}
           x={h.x - offset}
           y={h.y - offset}
           width={scaledHandleSize}
@@ -44,6 +46,7 @@ export function SelectionOverlay() {
           stroke="#3b82f6"
           strokeWidth={1.5 / zoom}
           style={{ cursor: h.cursor, pointerEvents: 'auto' }}
+          className="hover:fill-blue-50 transition-colors"
         />
       ))}
     </g>

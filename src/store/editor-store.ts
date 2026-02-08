@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
-import { CanvasElement, CanvasTransform, Design } from '@shared/types';
+import { CanvasElement, CanvasTransform, Design, ElementType } from '@shared/types';
 import { api } from '@/lib/api-client';
 export type Tool = 'select' | 'rect' | 'circle' | 'text' | 'hand';
 interface EditorState {

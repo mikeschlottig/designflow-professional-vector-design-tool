@@ -1,6 +1,7 @@
 import React from 'react';
 import { Square, Circle, Type, Eye, Lock } from 'lucide-react';
-import { useEditorStore, ElementType } from '@/store/editor-store';
+import { useEditorStore } from '@/store/editor-store';
+import { ElementType } from '@shared/types';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 const TypeIcon = ({ type }: { type: ElementType }) => {
@@ -17,7 +18,7 @@ export function LayersPanel() {
   const setSelection = useEditorStore((s) => s.setSelection);
   return (
     <div className="w-60 border-r border-zinc-800 bg-zinc-950 flex flex-col h-full">
-      <div className="p-4 border-bottom border-zinc-800 flex items-center justify-between">
+      <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
         <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Layers</h3>
       </div>
       <ScrollArea className="flex-1">
@@ -33,8 +34,8 @@ export function LayersPanel() {
                 onClick={() => setSelection(el.id)}
                 className={cn(
                   "group flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-default transition-colors",
-                  selectedId === el.id 
-                    ? "bg-blue-600/20 text-blue-400 border border-blue-600/30" 
+                  selectedId === el.id
+                    ? "bg-blue-600/20 text-blue-400 border border-blue-600/30"
                     : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
                 )}
               >

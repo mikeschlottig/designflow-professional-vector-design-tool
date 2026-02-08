@@ -18,9 +18,10 @@ export interface ChatMessage {
   text: string;
   ts: number;
 }
+export type ElementType = 'rect' | 'circle' | 'text';
 export interface CanvasElement {
   id: string;
-  type: 'rect' | 'circle' | 'text';
+  type: ElementType;
   x: number;
   y: number;
   width: number;
@@ -29,6 +30,7 @@ export interface CanvasElement {
   stroke: string;
   strokeWidth: number;
   text?: string;
+  fontSize?: number;
   name: string;
 }
 export interface CanvasTransform {
