@@ -73,22 +73,22 @@ export function EditorPage() {
   };
   if (id && !designId) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-zinc-950">
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-4" />
-        <p className="text-zinc-500 text-sm">Syncing with cloud...</p>
+        <p className="text-muted-foreground text-sm">Syncing with cloud...</p>
       </div>
     );
   }
   return (
-    <div className="h-screen w-screen flex flex-col bg-zinc-950 text-white overflow-hidden">
-      <header className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 bg-zinc-950/80 backdrop-blur z-50">
+    <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
+      <header className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0 bg-background/80 backdrop-blur z-50">
         <div className="flex items-center gap-4">
           <Link to="/">
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400">
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
               <ChevronLeft className="w-4 h-4" />
             </Button>
           </Link>
-          <div className="h-4 w-px bg-zinc-800" />
+          <div className="h-4 w-px bg-border" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="h-7 px-2 text-sm gap-1.5">
@@ -96,11 +96,11 @@ export function EditorPage() {
                 <ChevronDown className="w-3 h-3" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-zinc-900 border-zinc-800 text-zinc-300">
+            <DropdownMenuContent>
               <DropdownMenuItem onClick={handleExportSVG}>
                 <Download className="w-4 h-4 mr-2" /> Export SVG
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-zinc-800" />
+              <DropdownMenuSeparator className="bg-border" />
               <DropdownMenuItem onClick={() => navigate('/')}>Exit to Dashboard</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -110,7 +110,7 @@ export function EditorPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="mr-4">
-                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-zinc-500" /> : <Cloud className="w-4 h-4 text-blue-500" />}
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /> : <Cloud className="w-4 h-4 text-blue-500" />}
                 </div>
               </TooltipTrigger>
               <TooltipContent>{isSaving ? 'Saving...' : 'All changes saved'}</TooltipContent>
@@ -137,8 +137,8 @@ export function EditorPage() {
           <Canvas />
           {!presentationMode && <Toolbar />}
           {presentationMode && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-zinc-900/80 border border-zinc-800 rounded-full px-4 py-2 text-[10px] text-zinc-400">
-              Presentation Mode • Press <kbd className="bg-zinc-800 px-1 rounded">Esc</kbd> or <kbd className="bg-zinc-800 px-1 rounded">⌘P</kbd> to exit
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-muted/80 border border-border rounded-full px-4 py-2 text-[10px] text-muted-foreground">
+              Presentation Mode • Press <kbd className="bg-muted px-1 rounded">Esc</kbd> or <kbd className="bg-muted px-1 rounded">⌘P</kbd> to exit
             </div>
           )}
         </div>

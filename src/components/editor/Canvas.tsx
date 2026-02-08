@@ -114,17 +114,17 @@ export function Canvas() {
     if (currentTool === 'select') {
       const clickedEl = [...elements].reverse().find(el => isPointInRect(point, el));
       if (clickedEl) {
+        const newSelectedIds = e.shiftKey
+          ? (selectedIds.includes(clickedEl.id) ? selectedIds.filter(id => id !== clickedEl.id) : [...selectedIds, clickedEl.id])
+          : [clickedEl.id];
         if (e.shiftKey) {
           toggleSelection(clickedEl.id);
-        } else if (!selectedIds.includes(clickedEl.id)) {
+        } else {
           setSelection(clickedEl.id);
         }
-        const currentSelected = e.shiftKey 
-          ? (selectedIds.includes(clickedEl.id) ? selectedIds.filter(id => id !== clickedEl.id) : [...selectedIds, clickedEl.id])
-          : (selectedIds.includes(clickedEl.id) ? selectedIds : [clickedEl.id]);
         const startPosMap = new Map();
         elements.forEach(el => {
-          if (currentSelected.includes(el.id)) {
+          if (newSelectedIds.includes(el.id)) {
             startPosMap.set(el.id, { x: el.x, y: el.y, width: el.width, height: el.height });
           }
         });
@@ -245,7 +245,7 @@ export function Canvas() {
       <ContextMenuTrigger asChild>
         <div
           ref={containerRef}
-          className="flex-1 bg-zinc-950 overflow-hidden relative touch-none"
+          className="flex-1 bg-background overflow-hidden relative touch-none"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -253,9 +253,9 @@ export function Canvas() {
           style={{ cursor: currentTool === 'hand' ? 'grab' : 'crosshair' }}
         >
           <div
-            className="absolute inset-0 pointer-events-none opacity-[0.05]"
+            className="absolute inset-0 pointer-events-none opacity-[0.08]"
             style={{
-              backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)',
+              backgroundImage: 'radial-gradient(circle, rgb(148 163 184 / 0.3) 1px, transparent 1px)',
               backgroundSize: `${40 * canvasTransform.zoom}px ${40 * canvasTransform.zoom}px`,
               backgroundPosition: `${canvasTransform.x}px ${canvasTransform.y}px`
             }}
@@ -297,21 +297,21 @@ export function Canvas() {
           </motion.svg>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-64 bg-zinc-900 border-zinc-800 text-zinc-300">
+      <ContextMenuContent className="w-64">
         <ContextMenuItem onClick={duplicateSelected} disabled={selectedIds.length === 0}>
           <Copy className="w-4 h-4 mr-2" /> Duplicate <ContextMenuShortcut>⌘D</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem onClick={removeSelected} disabled={selectedIds.length === 0} className="text-red-400">
           <Trash2 className="w-4 h-4 mr-2" /> Delete <ContextMenuShortcut>⌫</ContextMenuShortcut>
         </ContextMenuItem>
-        <ContextMenuSeparator className="bg-zinc-800" />
+        <ContextMenuSeparator />
         <ContextMenuItem onClick={bringToFront} disabled={selectedIds.length === 0}>
           <Layers className="w-4 h-4 mr-2" /> Bring to Front
         </ContextMenuItem>
         <ContextMenuItem onClick={sendToBack} disabled={selectedIds.length === 0}>
           <Layers className="w-4 h-4 mr-2" /> Send to Back
         </ContextMenuItem>
-        <ContextMenuSeparator className="bg-zinc-800" />
+        <ContextMenuSeparator />
         <ContextMenuItem onClick={undo}>
           Undo <ContextMenuShortcut>⌘Z</ContextMenuShortcut>
         </ContextMenuItem>

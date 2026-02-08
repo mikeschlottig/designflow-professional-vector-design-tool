@@ -32,7 +32,7 @@ export function SelectionOverlay() {
         width={width}
         height={height}
         fill="none"
-        stroke="#3b82f6"
+        stroke="hsl(var(--primary))"
         strokeWidth={2 / zoom}
         className="pointer-events-none"
       />
@@ -44,11 +44,11 @@ export function SelectionOverlay() {
           y={h.y - offset}
           width={scaledHandleSize}
           height={scaledHandleSize}
-          fill="white"
-          stroke="#3b82f6"
+          fill="hsl(var(--foreground))"
+          stroke="hsl(var(--foreground))"
           strokeWidth={1.5 / zoom}
           style={{ cursor: h.cursor, pointerEvents: 'auto' }}
-          className="hover:fill-blue-50 transition-colors"
+          className="hover:fill-primary/20 transition-colors"
         />
       ))}
     </g>

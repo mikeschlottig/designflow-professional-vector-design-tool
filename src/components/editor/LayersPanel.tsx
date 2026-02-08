@@ -30,7 +30,7 @@ const TypeIcon = ({ type }: { type: ElementType }) => {
   }
 };
 function SortableLayerItem({ el }: { el: CanvasElement }) {
-  const selectedId = useEditorStore((s) => s.selectedId);
+  const isSelected = useEditorStore((s) => s.selectedIds.includes(el.id));
   const setSelection = useEditorStore((s) => s.setSelection);
   const {
     attributes,
@@ -52,22 +52,22 @@ function SortableLayerItem({ el }: { el: CanvasElement }) {
       onClick={() => setSelection(el.id)}
       className={cn(
         "group flex items-center gap-2 px-2 py-1.5 rounded-md text-sm cursor-default transition-all",
-        selectedId === el.id
-          ? "bg-blue-600/20 text-blue-400 border border-blue-600/30"
-          : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 border border-transparent",
-        isDragging && "opacity-50 scale-[0.98] shadow-xl border-zinc-700 bg-zinc-800"
+        isSelected
+          ? "bg-primary/10 text-primary border border-primary/30"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent",
+        isDragging && "opacity-50 scale-[0.98] shadow-xl border-border bg-muted"
       )}
     >
       <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <GripVertical className="w-3 h-3 text-zinc-600" />
+        <GripVertical className="w-3 h-3 text-muted-foreground hover:text-foreground" />
       </div>
       <TypeIcon type={el.type} />
       <span className="flex-1 truncate text-[11px] font-medium">
         {el.name}
       </span>
       <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Eye className="w-3 h-3 text-zinc-600 hover:text-zinc-400" />
-        <Lock className="w-3 h-3 text-zinc-600 hover:text-zinc-400" />
+        <Eye className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+        <Lock className="w-3 h-3 text-muted-foreground hover:text-foreground" />
       </div>
     </div>
   );
@@ -86,22 +86,21 @@ export function LayersPanel() {
       saveHistory();
       const oldIndex = elements.findIndex((el) => el.id === active.id);
       const newIndex = elements.findIndex((el) => el.id === over.id);
-      // Elements in SVG are rendered bottom-to-top, so we reverse for the visual list logic
-      // But for the actual array reorder, we handle it straight.
-      setElements(arrayMove(elements, oldIndex, newIndex));
+      // Visual list is reversed (top layer first), so swap indices for correct Z-order
+      setElements(arrayMove(elements, oldIndex, elements.length - 1 - newIndex));
     }
   };
   // Visual list is reversed so the "top" layer is at the top of the list
   const displayElements = [...elements].reverse();
   return (
-    <div className="w-60 border-r border-zinc-800 bg-zinc-950 flex flex-col h-full">
-      <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-        <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Layers</h3>
+    <div className="w-60 border-r border-border bg-background flex flex-col h-full">
+      <div className="p-4 border-b border-border flex items-center justify-between">
+        <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Layers</h3>
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2">
           {elements.length === 0 ? (
-            <div className="px-4 py-8 text-center text-[11px] text-zinc-600 italic">
+            <div className="px-4 py-8 text-center text-[11px] text-muted-foreground italic">
               Empty Canvas
             </div>
           ) : (
@@ -111,7 +110,7 @@ export function LayersPanel() {
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={displayElements.map(el => el.id)}
+                items={elements.map(el => el.id)}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-0.5">
