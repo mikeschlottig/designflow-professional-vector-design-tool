@@ -4,6 +4,15 @@ import { screenToCanvas } from '@/lib/geometry';
 import { motion } from 'framer-motion';
 import { SelectionOverlay } from './SelectionOverlay';
 import { ElementType } from '@shared/types';
+import { 
+  ContextMenu, 
+  ContextMenuContent, 
+  ContextMenuItem, 
+  ContextMenuSeparator, 
+  ContextMenuTrigger,
+  ContextMenuShortcut
+} from "@/components/ui/context-menu";
+import { Copy, Trash2, ArrowUp, ArrowDown, Layers, Square, Circle, Type } from 'lucide-react';
 export function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const elements = useEditorStore((s) => s.elements);
@@ -17,6 +26,12 @@ export function Canvas() {
   const setCanvasTransform = useEditorStore((s) => s.setCanvasTransform);
   const setTool = useEditorStore((s) => s.setTool);
   const saveDesign = useEditorStore((s) => s.saveDesign);
+  const saveHistory = useEditorStore((s) => s.saveHistory);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
+  const duplicateElement = useEditorStore((s) => s.duplicateElement);
+  const bringToFront = useEditorStore((s) => s.bringToFront);
+  const sendToBack = useEditorStore((s) => s.sendToBack);
   const isDirty = useEditorStore((s) => s.isDirty);
   const [interaction, setInteraction] = useState<{
     type: 'idle' | 'drawing' | 'moving' | 'panning' | 'resizing';
@@ -28,6 +43,10 @@ export function Canvas() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+      const isMod = e.ctrlKey || e.metaKey;
+      if (isMod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      if (isMod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+      if (isMod && e.key === 'd') { e.preventDefault(); if (selectedId) duplicateElement(selectedId); }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedId) removeElement(selectedId);
       }
@@ -50,7 +69,7 @@ export function Canvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedId, removeElement, setTool]);
+  }, [selectedId, removeElement, setTool, undo, redo, duplicateElement]);
   useEffect(() => {
     if (isDirty) {
       const timer = setTimeout(() => saveDesign(), 2000);
@@ -58,15 +77,16 @@ export function Canvas() {
     }
   }, [isDirty, saveDesign]);
   const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button === 2) return; // Right click handled by context menu
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const point = screenToCanvas(e.clientX, e.clientY, rect.left + canvasTransform.x, rect.top + canvasTransform.y, canvasTransform.zoom);
-    // Handle resizing first (from SelectionOverlay event bubbling)
     const target = e.target as HTMLElement;
     const handleIdx = target.getAttribute('data-handle-index');
     if (handleIdx !== null && selectedId) {
       const el = elements.find(item => item.id === selectedId);
       if (el) {
+        saveHistory();
         setInteraction({
           type: 'resizing',
           activeId: selectedId,
@@ -100,18 +120,19 @@ export function Canvas() {
       return;
     }
     if (['rect', 'circle', 'text'].includes(currentTool)) {
+      saveHistory();
       const isText = currentTool === 'text';
       const id = addElement({
         type: currentTool as ElementType,
         x: point.x,
         y: point.y,
-        width: isText ? 120 : 1,
-        height: isText ? 24 : 1,
+        width: isText ? 150 : 1,
+        height: isText ? 30 : 1,
         fill: isText ? '#ffffff' : '#3b82f6',
         stroke: isText ? 'transparent' : '#2563eb',
         strokeWidth: isText ? 0 : 1,
         name: isText ? 'Text' : (currentTool === 'rect' ? 'Rectangle' : 'Circle'),
-        text: isText ? 'Double click to edit' : undefined,
+        text: isText ? 'Double click properties to edit' : undefined,
         fontSize: isText ? 16 : undefined,
       });
       if (isText) {
@@ -147,7 +168,6 @@ export function Canvas() {
       const dy = point.y - interaction.startPoint.y;
       const { x, y, width, height } = interaction.elementStartPos;
       let nx = x, ny = y, nw = width, nh = height;
-      // handles: [TL, TM, TR, RM, BR, BM, BL, LM]
       switch (interaction.handleIndex) {
         case 0: nx += dx; ny += dy; nw -= dx; nh -= dy; break;
         case 1: ny += dy; nh -= dy; break;
@@ -170,6 +190,10 @@ export function Canvas() {
     }
   };
   const handlePointerUp = () => {
+    if (interaction.type === 'moving' || interaction.type === 'resizing') {
+      // Logic for saving history was done at PointerDown for these, 
+      // but maybe we only want to save if it actually changed?
+    }
     if (interaction.type !== 'idle') {
       setInteraction({ type: 'idle', activeId: null, startPoint: { x: 0, y: 0 } });
       saveDesign();
@@ -188,61 +212,88 @@ export function Canvas() {
     }
   };
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 bg-zinc-900 overflow-hidden relative touch-none"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onWheel={handleWheel}
-      style={{ cursor: currentTool === 'hand' ? 'grab' : 'crosshair' }}
-    >
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03]"
-        style={{
-          backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)',
-          backgroundSize: `${20 * canvasTransform.zoom}px ${20 * canvasTransform.zoom}px`,
-          backgroundPosition: `${canvasTransform.x}px ${canvasTransform.y}px`
-        }}
-      />
-      <motion.svg className="w-full h-full">
-        <g transform={`translate(${canvasTransform.x}, ${canvasTransform.y}) scale(${canvasTransform.zoom})`}>
-          {elements.map((el) => {
-            const isSelected = selectedId === el.id;
-            const commonProps = {
-              key: el.id,
-              fill: el.fill,
-              stroke: isSelected ? '#3b82f6' : el.stroke,
-              strokeWidth: isSelected ? 2 / canvasTransform.zoom : el.strokeWidth / canvasTransform.zoom,
-            };
-            if (el.type === 'rect') {
-              return <rect {...commonProps} x={el.x} y={el.y} width={el.width} height={el.height} rx={2} />;
-            }
-            if (el.type === 'circle') {
-              return <ellipse {...commonProps} cx={el.x + el.width/2} cy={el.y + el.height/2} rx={el.width/2} ry={el.height/2} />;
-            }
-            if (el.type === 'text') {
-              return (
-                <text
-                  {...commonProps}
-                  x={el.x}
-                  y={el.y + (el.fontSize || 16)}
-                  style={{
-                    fontSize: el.fontSize || 16,
-                    fontFamily: 'Inter, sans-serif',
-                    userSelect: 'none',
-                    pointerEvents: 'none'
-                  }}
-                >
-                  {el.text}
-                </text>
-              );
-            }
-            return null;
-          })}
-          <SelectionOverlay />
-        </g>
-      </motion.svg>
-    </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          ref={containerRef}
+          className="flex-1 bg-zinc-950 overflow-hidden relative touch-none"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onWheel={handleWheel}
+          style={{ cursor: currentTool === 'hand' ? 'grab' : 'crosshair' }}
+        >
+          <div
+            className="absolute inset-0 pointer-events-none opacity-[0.05]"
+            style={{
+              backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)',
+              backgroundSize: `${40 * canvasTransform.zoom}px ${40 * canvasTransform.zoom}px`,
+              backgroundPosition: `${canvasTransform.x}px ${canvasTransform.y}px`
+            }}
+          />
+          <motion.svg className="w-full h-full" id="canvas-svg">
+            <g transform={`translate(${canvasTransform.x}, ${canvasTransform.y}) scale(${canvasTransform.zoom})`}>
+              {elements.map((el) => {
+                const isSelected = selectedId === el.id;
+                const commonProps = {
+                  key: el.id,
+                  fill: el.fill,
+                  stroke: isSelected ? '#3b82f6' : el.stroke,
+                  strokeWidth: isSelected ? 2 / canvasTransform.zoom : el.strokeWidth / canvasTransform.zoom,
+                };
+                if (el.type === 'rect') {
+                  return <rect {...commonProps} x={el.x} y={el.y} width={el.width} height={el.height} rx={2} />;
+                }
+                if (el.type === 'circle') {
+                  return <ellipse {...commonProps} cx={el.x + el.width/2} cy={el.y + el.height/2} rx={el.width/2} ry={el.height/2} />;
+                }
+                if (el.type === 'text') {
+                  return (
+                    <text
+                      {...commonProps}
+                      x={el.x}
+                      y={el.y + (el.fontSize || 16)}
+                      style={{
+                        fontSize: el.fontSize || 16,
+                        fontFamily: 'Inter, sans-serif',
+                        userSelect: 'none',
+                        pointerEvents: 'none',
+                        fontWeight: 500
+                      }}
+                    >
+                      {el.text}
+                    </text>
+                  );
+                }
+                return null;
+              })}
+              <SelectionOverlay />
+            </g>
+          </motion.svg>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-64 bg-zinc-900 border-zinc-800 text-zinc-300">
+        <ContextMenuItem onClick={() => selectedId && duplicateElement(selectedId)} disabled={!selectedId}>
+          <Copy className="w-4 h-4 mr-2" /> Duplicate <ContextMenuShortcut>⌘D</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => selectedId && removeElement(selectedId)} disabled={!selectedId} className="text-red-400">
+          <Trash2 className="w-4 h-4 mr-2" /> Delete <ContextMenuShortcut>⌫</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuSeparator className="bg-zinc-800" />
+        <ContextMenuItem onClick={() => selectedId && bringToFront(selectedId)} disabled={!selectedId}>
+          <Layers className="w-4 h-4 mr-2" /> Bring to Front
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => selectedId && sendToBack(selectedId)} disabled={!selectedId}>
+          <Layers className="w-4 h-4 mr-2" /> Send to Back
+        </ContextMenuItem>
+        <ContextMenuSeparator className="bg-zinc-800" />
+        <ContextMenuItem onClick={undo}>
+          Undo <ContextMenuShortcut>⌘Z</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem onClick={redo}>
+          Redo <ContextMenuShortcut>⌘⇧Z</ContextMenuShortcut>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
