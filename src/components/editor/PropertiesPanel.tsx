@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useEditorStore } from '@/store/editor-store';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,15 @@ export function PropertiesPanel() {
   const selectedElements = elements.filter(el => selectedIds.includes(el.id));
   const isSingle = selectedElements.length === 1;
   const isMultiple = selectedElements.length > 1;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (selectedElements.length === 1 && selectedElements[0]?.type === 'text') {
+      const timer = setTimeout(() => textareaRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedIds, selectedElements]);
+
   if (selectedElements.length === 0) {
     return (
       <div className="w-72 border-l border-border bg-background p-6 h-full flex flex-col items-center justify-center text-muted-foreground italic text-[11px] text-center">
@@ -76,6 +85,7 @@ export function PropertiesPanel() {
           <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Text</h3>
           <div className="space-y-3">
             <Textarea
+              ref={textareaRef}
               value={selectedElements[0].text}
               onChange={(e) => updateElement(selectedElements[0].id, { text: e.target.value })}
               className="text-[11px] min-h-[60px] resize-none"

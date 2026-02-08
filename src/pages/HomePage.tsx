@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Clock, FileCode, Layers, Zap, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,11 +7,21 @@ import { Card, CardContent } from '@/components/ui/card';
 import { api } from '@/lib/api-client';
 import type { Design } from '@shared/types';
 import { formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
 export function HomePage() {
   const navigate = useNavigate();
   const [designs, setDesigns] = useState<Design[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingId) {
+      const t = setTimeout(() => editRef.current?.select(), 50);
+      return () => clearTimeout(t);
+    }
+  }, [editingId]);
   useEffect(() => {
     const fetchDesigns = async () => {
       try {
@@ -117,12 +127,31 @@ export function HomePage() {
                         </div>
                         <div className="p-4 flex items-center justify-between">
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm group-hover:text-blue-400 transition-colors truncate">{design.name}</p>
+                            {editingId === design.id ? (
+                              <input
+                                ref={editRef}
+                                defaultValue={design.name}
+                                autoFocus
+                                className="w-full font-medium text-sm bg-transparent border-0 p-0 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded text-left"
+                                onBlur={(e) => {
+                                  const name = e.target.value.trim() || 'Untitled Design';
+                                  setDesigns(p => p.map(d => d.id === design.id ? { ...d, name } : d));
+                                  api(`/api/designs/${design.id}`, { method: 'PATCH', body: JSON.stringify({ name }) }).catch(() => toast.error('Failed to rename'));
+                                  setEditingId(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                  if (e.key === 'Escape') setEditingId(null);
+                                }}
+                              />
+                            ) : (
+                              <p onDoubleClick={() => setEditingId(design.id)} className="font-medium text-sm group-hover:text-blue-400 transition-colors truncate cursor-pointer select-none" title="Double-click to rename">{design.name}</p>
+                            )}
                             <p className="text-xs text-muted-foreground">{formatDistanceToNow(design.updatedAt)} ago</p>
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={(e) => handleDelete(design.id, e)}
                             className="h-8 w-8 text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                           >

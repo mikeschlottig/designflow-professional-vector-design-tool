@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Canvas } from '@/components/editor/Canvas';
 import { Toolbar } from '@/components/editor/Toolbar';
@@ -30,6 +30,7 @@ import { api } from '@/lib/api-client';
 import { Design } from '@shared/types';
 import { toast } from 'sonner';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Input } from '@/components/ui/input';
 export function EditorPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -40,6 +41,13 @@ export function EditorPage() {
   const designId = useEditorStore((s) => s.designId);
   const presentationMode = useEditorStore((s) => s.presentationMode);
   const togglePresentationMode = useEditorStore((s) => s.togglePresentationMode);
+  const setDesignName = useEditorStore((s) => s.setDesignName);
+  const elements = useEditorStore((s) => s.elements);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [headerEditing, setHeaderEditing] = useState(false);
+  const [headerEditName, setHeaderEditName] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const headerRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (id) loadDesign(id);
   }, [id, loadDesign]);
@@ -53,15 +61,65 @@ export function EditorPage() {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [togglePresentationMode]);
-  const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
-    toast.success('Editor link copied to clipboard');
+
+  useEffect(() => {
+    if (showShareModal) {
+      setTimeout(() => {
+        const input = inputRef.current;
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }, 100);
+    }
+  }, [showShareModal]);
+
+  useEffect(() => {
+    if (headerEditing) {
+      const input = headerRef.current;
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+  }, [headerEditing]);
+  const handleShare = async () => {
+    const url = window.location.href;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Copied!');
+    } catch {
+      setShowShareModal(true);
+    }
   };
   const handleExportSVG = () => {
     const svgElement = document.getElementById('canvas-svg');
     if (!svgElement) return;
+    
     const clone = svgElement.cloneNode(true) as SVGSVGElement;
-    clone.querySelectorAll('.selection-overlay').forEach(o => o.remove());
+    clone.querySelectorAll('[class*="selection"], [data-handle-index]').forEach(o => o.remove());
+    
+    if (elements.length === 0) {
+      clone.setAttribute('viewBox', '0 0 1200 800');
+    } else {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      elements.forEach(el => {
+        const stroke = el.strokeWidth / 2;
+        minX = Math.min(minX, el.x - stroke);
+        minY = Math.min(minY, el.y - stroke);
+        maxX = Math.max(maxX, el.x + el.width + stroke);
+        maxY = Math.max(maxY, el.y + el.height + stroke);
+      });
+      const pad = 50;
+      const vbX = minX - pad;
+      const vbY = minY - pad;
+      const vbW = maxX - minX + pad * 2;
+      const vbH = maxY - minY + pad * 2;
+      clone.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+      clone.removeAttribute('width');
+      clone.removeAttribute('height');
+    }
+    
     const svgData = new XMLSerializer().serializeToString(clone);
     const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -71,6 +129,8 @@ export function EditorPage() {
     link.click();
     toast.success('SVG exported');
   };
+
+
   if (id && !designId) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-background">
@@ -89,21 +149,51 @@ export function EditorPage() {
             </Button>
           </Link>
           <div className="h-4 w-px bg-border" />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-7 px-2 text-sm gap-1.5">
-                <span className="truncate max-w-[120px]">{designName}</span>
-                <ChevronDown className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={handleExportSVG}>
-                <Download className="w-4 h-4 mr-2" /> Export SVG
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-border" />
-              <DropdownMenuItem onClick={() => navigate('/')}>Exit to Dashboard</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {headerEditing ? (
+            <input
+              ref={headerRef}
+              value={headerEditName}
+              onChange={(e) => setHeaderEditName(e.target.value)}
+              onBlur={() => {
+                setDesignName(headerEditName.trim() || 'Untitled Design');
+                setHeaderEditing(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setDesignName(headerEditName.trim() || 'Untitled Design');
+                  setHeaderEditing(false);
+                }
+                if (e.key === 'Escape') {
+                  setHeaderEditing(false);
+                }
+              }}
+              className="h-7 px-2 bg-transparent border-0 text-sm max-w-[140px] outline-none"
+            />
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="h-7 px-2 text-sm gap-1.5 justify-between min-w-[140px]"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setHeaderEditing(true);
+                    setHeaderEditName(designName);
+                  }}
+                >
+                  <span className="truncate max-w-[120px]">{designName}</span>
+                  <ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={handleExportSVG}>
+                  <Download className="w-4 h-4 mr-2" /> Export SVG
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem onClick={() => navigate('/')}>Exit to Dashboard</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <TooltipProvider>
@@ -150,6 +240,23 @@ export function EditorPage() {
           )}
         </AnimatePresence>
       </div>
+      {showShareModal && (
+        <div className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowShareModal(false)}>
+          <div className="bg-background border border-border rounded-xl p-6 shadow-2xl w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-2">Copy Share Link</h3>
+            <Input 
+              ref={inputRef} 
+              value={window.location.href} 
+              readOnly 
+              className="font-mono text-sm p-3 border rounded-md bg-muted mb-3" 
+            />
+            <p className="text-xs text-muted-foreground mb-4">Select all and copy (⌘C)</p>
+            <Button className="w-full" variant="outline" onClick={() => setShowShareModal(false)}>
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

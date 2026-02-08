@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useEditorStore } from '@/store/editor-store';
 import { screenToCanvas, isPointInRect } from '@/lib/geometry';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,6 +43,18 @@ export function Canvas() {
     startPoint: { x: number; y: number };
     elementsStartPos?: Map<string, { x: number; y: number; width: number; height: number }>;
   }>({ type: 'idle', activeId: null, startPoint: { x: 0, y: 0 } });
+
+  const svgRef = useRef<SVGSVGElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastClickRef = useRef({ el: '', time: 0 });
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [overlayTextRect, setOverlayTextRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    fontSize: number;
+  } | null>(null);
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
@@ -78,6 +90,26 @@ export function Canvas() {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [undo, redo, duplicateSelected, removeSelected, nudgeElements, setTool]);
+
+  useEffect(() => {
+    if (editingTextId && svgRef.current) {
+      const el = svgRef.current.querySelector(`[data-el-id="${editingTextId}"]`) as SVGTextElement;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const containerRect = containerRef.current!.getBoundingClientRect();
+        setOverlayTextRect({
+          left: rect.left - containerRect.left,
+          top: rect.top - containerRect.top,
+          width: rect.width,
+          height: rect.height,
+          fontSize: parseFloat(el.style.fontSize || el.getAttribute('font-size') || '16')
+        });
+        requestAnimationFrame(() => textareaRef.current?.focus());
+      }
+    } else {
+      setOverlayTextRect(null);
+    }
+  }, [editingTextId]);
   useEffect(() => {
     if (isDirty) {
       const timer = setTimeout(() => saveDesign(), 3000);
@@ -113,19 +145,23 @@ export function Canvas() {
     }
     if (currentTool === 'select') {
       const clickedEl = [...elements].reverse().find(el => isPointInRect(point, el));
+      const now = Date.now();
+      if (clickedEl?.type === 'text' && lastClickRef.current.el === clickedEl.id && now - lastClickRef.current.time < 350) {
+        setEditingTextId(clickedEl.id);
+        lastClickRef.current = { el: '', time: 0 };
+        return;
+      }
       if (clickedEl) {
-        const newSelectedIds = e.shiftKey
-          ? (selectedIds.includes(clickedEl.id) ? selectedIds.filter(id => id !== clickedEl.id) : [...selectedIds, clickedEl.id])
-          : [clickedEl.id];
         if (e.shiftKey) {
           toggleSelection(clickedEl.id);
         } else {
           setSelection(clickedEl.id);
         }
         const startPosMap = new Map();
-        elements.forEach(el => {
-          if (newSelectedIds.includes(el.id)) {
-            startPosMap.set(el.id, { x: el.x, y: el.y, width: el.width, height: el.height });
+        Array.from(selectedIds).forEach(id => {
+          const el = elements.find(el => el.id === id);
+          if (el) {
+            startPosMap.set(id, { x: el.x, y: el.y, width: el.width, height: el.height });
           }
         });
         setInteraction({
@@ -137,6 +173,8 @@ export function Canvas() {
       } else {
         setSelection(null);
       }
+      lastClickRef.current.el = clickedEl?.id || '';
+      lastClickRef.current.time = now;
       return;
     }
     if (['rect', 'circle', 'text'].includes(currentTool)) {
@@ -260,22 +298,23 @@ export function Canvas() {
               backgroundPosition: `${canvasTransform.x}px ${canvasTransform.y}px`
             }}
           />
-          <motion.svg className="w-full h-full" id="canvas-svg">
+          <motion.svg ref={svgRef} className="w-full h-full" id="canvas-svg">
             <g transform={`translate(${canvasTransform.x}, ${canvasTransform.y}) scale(${canvasTransform.zoom})`}>
               {elements.map((el) => {
                 const isSelected = selectedIds.includes(el.id);
-                const commonProps = {
-                  key: el.id,
+                const shapeProps = {
                   fill: el.fill,
                   stroke: isSelected ? '#3b82f6' : el.stroke,
                   strokeWidth: isSelected ? 2 / canvasTransform.zoom : el.strokeWidth / canvasTransform.zoom,
                 };
-                if (el.type === 'rect') return <rect {...commonProps} x={el.x} y={el.y} width={el.width} height={el.height} rx={2} />;
-                if (el.type === 'circle') return <ellipse {...commonProps} cx={el.x + el.width/2} cy={el.y + el.height/2} rx={el.width/2} ry={el.height/2} />;
+                if (el.type === 'rect') return <rect key={el.id} data-el-id={el.id} {...shapeProps} x={el.x} y={el.y} width={el.width} height={el.height} rx={2} />;
+                if (el.type === 'circle') return <ellipse key={el.id} data-el-id={el.id} {...shapeProps} cx={el.x + el.width/2} cy={el.y + el.height/2} rx={el.width/2} ry={el.height/2} />;
                 if (el.type === 'text') {
                   return (
                     <text
-                      {...commonProps}
+                      key={el.id}
+                      data-el-id={el.id}
+                      {...shapeProps}
                       x={el.x}
                       y={el.y + (el.fontSize || 16)}
                       style={{
@@ -296,6 +335,31 @@ export function Canvas() {
             </g>
           </motion.svg>
         </div>
+        {editingTextId && overlayTextRect && (
+          <div
+            className="absolute z-20"
+            style={{
+              left: overlayTextRect.left,
+              top: overlayTextRect.top,
+              width: overlayTextRect.width,
+              height: overlayTextRect.height
+            }}
+          >
+            <textarea
+              ref={textareaRef}
+              value={elements.find(e => e.id === editingTextId)?.text || ''}
+              onChange={(e) => updateElement(editingTextId!, { text: e.target.value })}
+              onBlur={() => setEditingTextId(null)}
+              className="w-full h-full resize-none border-2 border-primary/50 bg-background/95 backdrop-blur text-inherit outline-none p-1"
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontSize: overlayTextRect.fontSize,
+                fontWeight: 500,
+                lineHeight: 1.25
+              }}
+            />
+          </div>
+        )}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-64">
         <ContextMenuItem onClick={duplicateSelected} disabled={selectedIds.length === 0}>
